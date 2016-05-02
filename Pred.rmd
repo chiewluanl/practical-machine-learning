@@ -1,0 +1,103 @@
+---
+title: "Prediction Assignment"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## GitHub Documents
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+## Prepare the datasets
+
+Read the training data into a data table:
+
+```{r data}
+library(lattice)
+library(ggplot2) 
+library(caret)
+library(randomForest)
+library(rpart)
+library(rpart.plot)
+library(e1071)
+if(!file.exists("./data")){
+  	dir.create("./data")
+  
+    fileTrainingUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+    download.file(fileTrainingUrl,destfile="./data/pml-training.csv",method="curl")
+    
+    fileTestingUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+    download.file(fileTrainingUrl,destfile="./data/pml-testing.csv",method="curl")
+}
+# data load and clean up
+trainingset <- read.csv("./data/pml-training.csv", na.strings=c("NA","#DIV/0!", ""), header = TRUE)
+testingset <- read.csv("./data/pml-testing.csv", na.strings=c("NA","#DIV/0!", ""), header = TRUE)
+    
+set.seed(1234)
+
+# Delete columns with all missing values
+trainingset<-trainingset[,colSums(is.na(trainingset)) == 0]
+testingset <-testingset[,colSums(is.na(testingset)) == 0]
+
+# Delete variables are irrelevant to our current project: user_name, raw_timestamp_part_1, raw_timestamp_part_,2 cvtd_timestamp, new_window, and  num_window (columns 1 to 7). 
+trainingset   <-trainingset[,-c(1:7)]
+testingset <-testingset[,-c(1:7)]
+
+# partition the data so that 75% of the training dataset into training and the remaining 25% to testing
+traintrainset <- createDataPartition(y=trainingset$classe, p=0.75, list=FALSE)
+TrainTrainingSet <- trainingset[traintrainset, ] 
+TestTrainingSet <- trainingset[-traintrainset, ]
+
+# The variable "classe" contains 5 levels: A, B, C, D and E. A plot of the outcome variable will allow us to see the frequency of each levels in the TrainTrainingSet data set and # compare one another.
+plot(TrainTrainingSet$classe, col="yellow", main="Plot of levels of variable classe within the TrainTrainingSet data set", xlab="classe", ylab="Frequency")
+
+#Result : class A has the most frequent, level D has the least frequent
+
+#Prediction model 1: Decision Tree
+part1 <- rpart(classe ~ ., data=TrainTrainingSet, method="class")
+predict1 <- predict(part1, TestTrainingSet, type = "class")
+
+# Plot the Decision Tree
+rpart.plot(part1, main="Classification Tree", extra=102, under=TRUE, faclen=0)
+
+# Test results on our TestTrainingSet data set:
+confusionMatrix(predict1, TestTrainingSet$classe)
+
+#Prediction model 2: Random Forest
+ranF <- randomForest(classe ~. , data=TrainTrainingSet, method="class")
+predict2 <- predict(ranF, TestTrainingSet, type = "class")
+
+# Test results on TestTrainingSet data set:
+confusionMatrix(predict2, TestTrainingSet$classe)
+```
+
+#Decision on which Prediction Model to Use:
+Random Forest algorithm is better than Decision Trees. Hence, Random Forest will be chosen. 
+Accuracy for Random Forest model was `0.995` `(95% CI: (0.993, 0.997))` compared to Decision Tree model with `0.739` `(95% CI: (0.727, 0.752))`.
+The expected out-of-sample error is estimated at `0.005`, or `0.5%`.
+
+Here is the final outcome based on the Random Forest Prediction applied against the Testing dataset
+Predict outcome levels on the original Testing data set using Random Forest algorithm
+
+```{r result}
+predictfinal <- predict(ranF, testingset, type="class")
+predictfinal
+
+pml_write_files = function(x){
+  n = length(x)
+  if(!file.exists("./answers"))
+  	dir.create("./answers")
+  
+  path <- "./answers"
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=file.path(path, filename),quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+pml_write_files(predictfinal)
+
+```
+
